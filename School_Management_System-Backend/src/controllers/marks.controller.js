@@ -1,0 +1,66 @@
+
+// controllers/marks.controller.js
+import Marks from "../models/marks.model.js";
+import Student from "../models/student.model.js";
+import { ApiError } from "../utils/ApiError.js";
+
+export const saveMarks = async (req, res) => {
+  const { className, subject, team, totalMarks, studentMarks } = req.body;
+
+  try {
+    const created = await Promise.all(studentMarks.map(async ({ studentId, marksObtained }) => {
+      const percentage = ((marksObtained / totalMarks) * 100).toFixed(2);
+
+      return await Marks.create({
+        adminId: req.user.adminId,
+        student: studentId,
+        className,
+        subject,
+        team,
+        totalObtained: marksObtained,
+        totalMarksPerSubject: totalMarks,
+        percentage,
+        marksPerSubject: { [subject]: marksObtained },
+        subjects: [subject]
+      });
+    }));
+
+    res.status(201).json({ message: "Marks saved", data: created });
+  } catch (err) {
+    res.status(500).json({ message: "Error saving marks", error: err.message });
+  }
+};
+
+export const getMarksByClassAndTeam = async (req, res) => {
+  const { className, team } = req.params;
+  try {
+    const data = await Marks.find({ adminId: req.user._id, className, team }).populate("student", "name rollNo");
+    res.status(200).json(data);
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching marks", error: err.message });
+  }
+};
+
+export const getMarksForStudent = async (req, res) => {
+  try {
+    const studentId = req.user._id;
+    const marks = await Marks.find({ student: studentId }).lean();
+
+    if (!marks || marks.length === 0) {
+      return res.status(200).json([]);
+    }
+
+    const transformedMarks = marks.map(mark => ({
+      team: mark.team,
+      subjects: mark.subjects,
+      marksPerSubject: mark.marksPerSubject,
+      totalMarksPerSubject: mark.totalMarksPerSubject,
+      percentage: mark.percentage
+    }));
+
+    res.status(200).json(transformedMarks);
+  } catch (error) {
+    console.error("Error fetching student marks:", error);
+    res.status(500).json({ message: "Failed to fetch marks", error: error.message });
+  }
+};

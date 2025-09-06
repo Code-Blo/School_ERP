@@ -1,0 +1,63 @@
+
+// routes/marks.routes.js
+import express from "express";
+import authMiddleware from "../middlewares/auth.middleware.js";
+import { getMarksForStudent, saveMarks, getMarksByClassAndTeam } from "../controllers/marks.controller.js";
+import Marks from "../models/marks.model.js";
+
+const router = express.Router();
+
+router.get("/student", authMiddleware, getMarksForStudent);
+
+router.post("/multiple-subjects", authMiddleware, async (req, res) => {
+  try {
+    const { className, team, totalMarksPerSubject, subjects, studentMarks } = req.body;
+
+    if (!className || !team || !subjects || !studentMarks) {
+      return res.status(400).json({ message: "Missing required fields." });
+    }
+
+    if (!Array.isArray(subjects)) {
+      return res.status(400).json({ message: "Subjects must be an array." });
+    }
+
+    if (!Array.isArray(studentMarks)) {
+      return res.status(400).json({ message: "Student marks must be an array." });
+    }
+
+    const results = [];
+    for (const entry of studentMarks) {
+      const { studentId, marksPerSubject, totalObtained, percentage } = entry;
+
+      if (typeof marksPerSubject !== 'object' || marksPerSubject === null) {
+        return res.status(400).json({ message: "Invalid marks format." });
+      }
+
+      const createdMark = await Marks.create({
+        adminId: req.user.adminId,
+        student: studentId,
+        className,
+        team,
+        subjects,
+        marksPerSubject,
+        totalObtained,
+        percentage,
+        totalMarksPerSubject,
+      });
+
+      results.push(createdMark);
+    }
+
+    res.status(201).json({ 
+      message: "Marks saved successfully.",
+      count: results.length
+    });
+  } catch (error) {
+    console.error("Error saving marks:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
+router.get("/:className/:team", authMiddleware, getMarksByClassAndTeam);
+
+export default router;
